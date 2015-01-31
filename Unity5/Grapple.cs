@@ -212,8 +212,9 @@ public class Grapple : MonoBehaviour
             if (linkBuffer[i].joint != null)
             {
                 linkBuffer[i].joint.axis = new Vector3(0, 0, 1);
-                linkBuffer[i].joint.swing1Limit = new SoftJointLimit() { limit = 90, damper = 1 };
-                linkBuffer[i].joint.swing2Limit = new SoftJointLimit() { limit = 90, damper = 1 };
+                linkBuffer[i].joint.swing1Limit = new SoftJointLimit() { contactDistance = 90 };
+                linkBuffer[i].joint.swing2Limit = new SoftJointLimit() { contactDistance = 90 };
+                linkBuffer[i].joint.swingLimitSpring = new SoftJointLimitSpring() { damper = 1 };
             }
 
             prevRigidbody = linkBuffer[i].rigidBody;
@@ -233,10 +234,12 @@ public class Grapple : MonoBehaviour
         playerJoint.connectedBody = linkBuffer[activeJoints - 1].rigidBody;
 
         playerJoint.axis = new Vector3(0, 0, 1);
-        playerJoint.swing1Limit = new SoftJointLimit() { limit = 180, damper = 1 };
-        playerJoint.swing2Limit = new SoftJointLimit() { limit = 180, damper = 1 };
-        playerJoint.lowTwistLimit = new SoftJointLimit() { limit = -180, damper = 1 };
-        playerJoint.highTwistLimit = new SoftJointLimit() { limit = 180, damper = 1 };
+        playerJoint.swing1Limit = new SoftJointLimit() { contactDistance = 180 };
+        playerJoint.swing2Limit = new SoftJointLimit() { contactDistance = 180 };
+        playerJoint.lowTwistLimit = new SoftJointLimit() { contactDistance = -180 };
+        playerJoint.highTwistLimit = new SoftJointLimit() { contactDistance = 180 };
+
+        playerJoint.swingLimitSpring = new SoftJointLimitSpring() { damper = 1 };
 
         if (OnGrappleConnected != null)
             OnGrappleConnected.Invoke();
