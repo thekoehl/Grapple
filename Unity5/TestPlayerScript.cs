@@ -50,6 +50,8 @@ public class TestPlayerScript : MonoBehaviour
         grapple.ConnectPlayer(playersRigidbody);
         playersRigidbody.isKinematic = false;
 
+
+        // AutoRetract(speed, maxRetractLength)
         grapple.AutoRetract(grapple.grappleSpeed, 5);
     }
 

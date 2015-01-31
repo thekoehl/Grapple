@@ -127,7 +127,6 @@ public class Grapple : MonoBehaviour
         Vector3 curPosition = transform.position;
 
         RaycastHit rHit;
-        bool willHit = Physics.Raycast(curPosition, direction, out rHit, maxExtendedLength);
         Vector3 finalDestination;
 
         do
