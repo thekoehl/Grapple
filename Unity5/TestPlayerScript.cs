@@ -6,6 +6,9 @@ public class TestPlayerScript : MonoBehaviour
     public Grapple grapple;
     public Rigidbody playersRigidbody;
 
+    public float retractSpeed = 100;
+    public float extendSpeed = 100;
+
     void OnEnable()
     {
         if (playersRigidbody == null || grapple == null)
@@ -34,12 +37,12 @@ public class TestPlayerScript : MonoBehaviour
             grapple.Fire();
 
         if (grapple.IsExtended && Input.GetKey(KeyCode.UpArrow))
-            grapple.Retract(grapple.grappleSpeed * 0.5f);
+            grapple.Retract(retractSpeed * 0.5f);
 
         if (grapple.IsExtended && Input.GetMouseButtonDown(1))
         {
             grapple.DisconnectFromTarget();
-            grapple.AutoRetract(grapple.grappleSpeed, -1);
+            grapple.AutoRetract(retractSpeed, -1);
         }
     }
 
@@ -50,9 +53,8 @@ public class TestPlayerScript : MonoBehaviour
         grapple.ConnectPlayer(playersRigidbody);
         playersRigidbody.isKinematic = false;
 
-
         // AutoRetract(speed, maxRetractLength)
-        grapple.AutoRetract(grapple.grappleSpeed, 5);
+        //grapple.AutoRetract(retractSpeed, 5);
     }
 
     void OnGrappleFail()
@@ -60,7 +62,7 @@ public class TestPlayerScript : MonoBehaviour
         Debug.Log("Failed");
         grapple.ConnectPlayer(playersRigidbody);
 
-        grapple.AutoRetract(grapple.grappleSpeed, -1);
+        //grapple.AutoRetract(retractSpeed, -1);
     }
 
     void OnGrappleConnected()

@@ -21,12 +21,15 @@ public class Grapple : MonoBehaviour
 {
     public delegate void GrappleAction();
 
-    public float grappleSpeed = 5;
-    public float maxExtendedLength = 100;
+    //public GameObject grappleHookPrefab = null;
+    public GameObject linkPrefab = null;
     public float linkSpacing = 1;
     public float linkScale = 1;
     public bool alternateJoints = false;
-    public GameObject linkPrefab = null;
+
+    public float maxLinkCount = 20;
+    public float grappleForce = 1;
+    
     public bool IsExtended { get { return extended; } }
 
     private bool extended = false;
@@ -46,20 +49,24 @@ public class Grapple : MonoBehaviour
     private Rigidbody connectedPlayer = null;
     private CharacterJoint playerJoint = null;
 
-    void OnDrawGizmos()
-    {
-        Gizmos.DrawRay(transform.position, transform.forward * maxExtendedLength);
-    }
-
     void Start()
     {
+        //GameObject hook = (grappleHookPrefab == null) ? new GameObject("Hook") : Instantiate<GameObject>(grappleHookPrefab);
+        //linkBuffer.Add(new Link()
+        //    {
+        //        transform = hook.transform,
+        //        rigidBody = hook.AddComponent<Rigidbody>()
+        //    });
+
+        ////linkBuffer[0].rigidBody.mass = 0.001f;
+        //linkBuffer[0].SetActive(false);
+
         linkSpacing = Mathf.Max(linkSpacing, 0.001f);
-        int maxJointCount = Mathf.CeilToInt((maxExtendedLength / linkSpacing) * 1.1f);
-        for (int i = 0; i < maxJointCount; i++)
+        for (int i = 0; i < maxLinkCount; i++)
         {
             GameObject link = Instantiate<GameObject>(linkPrefab);
             link.transform.localScale = Vector3.one * linkScale;
-            //link.hideFlags = HideFlags.HideInHierarchy | HideFlags.HideInInspector;
+            link.hideFlags = HideFlags.HideInHierarchy;
    
             link.SetActive(false);
 
@@ -69,11 +76,7 @@ public class Grapple : MonoBehaviour
                 rigidBody = link.AddComponent<Rigidbody>(),
                 joint = link.AddComponent<CharacterJoint>() 
             });
-
-            Debug.DrawRay(transform.position + (transform.forward * linkSpacing * i), transform.up, Color.blue, 0.2f);
         }
-
-        Debug.DrawRay(transform.position, transform.forward * maxExtendedLength, Color.red, 0.2f);
     }
     
     void SetJointsKinematic(bool _value)
@@ -94,7 +97,6 @@ public class Grapple : MonoBehaviour
 
     IEnumerator iRetract(float _speed)
     {
-        //SetJointsKinematic(true);
         Rigidbody connBody = playerJoint.connectedBody;
         playerJoint.connectedBody = null;
 
@@ -117,78 +119,148 @@ public class Grapple : MonoBehaviour
 
         yield return 0;
 
-        //SetJointsKinematic(false);
     }
 
     IEnumerator iFire()
     {
-        Vector3 direction = transform.forward;
-        Vector3 spacing = direction * linkSpacing;
-        Vector3 curPosition = transform.position;
+        ResetLinks();
 
         RaycastHit rHit;
-        Vector3 finalDestination;
+        bool willContact = Physics.Raycast(transform.position, transform.forward, out rHit, maxLinkCount * linkSpacing);
+        Vector3 target = (willContact) ? rHit.point : (transform.position + transform.forward * maxLinkCount * linkSpacing);
+        linkBuffer[0].transform.position = transform.position;
 
         do
         {
-            finalDestination = transform.position + (transform.forward * maxExtendedLength); //willHit ? rHit.point : transform.position + (direction * maxRopeLength);
-            curPosition = Vector3.MoveTowards(curPosition, finalDestination, Time.deltaTime * grappleSpeed);
-            direction = (curPosition - transform.position).normalized;
-            spacing = direction * linkSpacing;
+            Vector3 direction = (linkBuffer[0].transform.position - transform.position).normalized;
+            
+            linkBuffer[0].transform.position = Vector3.MoveTowards(linkBuffer[0].transform.position, target, grappleForce * Time.deltaTime);
+            linkBuffer[0].transform.rotation = Quaternion.FromToRotation(Vector3.forward, direction);
+            linkBuffer[0].SetActive(true);
 
-            int jointCount = Mathf.CeilToInt(Vector3.Distance(curPosition, transform.position) / linkSpacing);
+            float length = Vector3.Distance(linkBuffer[0].transform.position, transform.position);            
+            int jointCount = (int)Mathf.Clamp(Mathf.CeilToInt(length / linkSpacing), 0, maxLinkCount);
             activeJoints = 0;
 
             for (int i = 0; i < jointCount - 1; i++)
             {
-                linkBuffer[i].SetActive(true);
-                activeJoints++;
-
-                linkBuffer[i].isKinematic = true;
-                linkBuffer[i].transform.position = (curPosition - (spacing * i));
+                linkBuffer[i].transform.position = (linkBuffer[0].transform.position - (direction * linkSpacing * i));
                 linkBuffer[i].transform.localScale = Vector3.one * linkScale;
 
                 if (alternateJoints && i % 2 == 0)
                     linkBuffer[i].transform.rotation = Quaternion.FromToRotation(Vector3.forward, direction) * Quaternion.Euler(0, 0, 90);
                 else
                     linkBuffer[i].transform.rotation = Quaternion.FromToRotation(Vector3.forward, direction);
+
+                linkBuffer[i].SetActive(true);
+                activeJoints++;
             }
 
-            float rayDist = linkSpacing * grappleSpeed * Time.deltaTime;
-            Debug.DrawRay(curPosition, direction * rayDist, Color.red);
-            if (Physics.Raycast(curPosition, direction * rayDist, out rHit, linkSpacing))
-            {
-                LinkRope();
+            if (length >= (maxLinkCount * linkSpacing))
+                break;
 
-                Rigidbody hitRigidbody = rHit.collider.gameObject.GetComponent<Rigidbody>();
-                if (hitRigidbody == null)
-                {
-                    hitRigidbody = rHit.collider.gameObject.AddComponent<Rigidbody>();
-                    hitRigidbody.isKinematic = true;
-                }
-
-                if (linkBuffer[0].joint == null)
-                    linkBuffer[0].joint = linkBuffer[0].rigidBody.gameObject.AddComponent<CharacterJoint>();
-
-                linkBuffer[0].joint.connectedBody = hitRigidbody;
-
-                if (OnGrappleContact != null)
-                    OnGrappleContact.Invoke();
-
-                yield break;
-            }
-            
             yield return 0;
-        }
-        while (Vector3.SqrMagnitude(finalDestination - curPosition) > 0.01f);
+
+        } while (Vector3.SqrMagnitude(target - linkBuffer[0].transform.position) > 0);
 
         LinkRope();
-        DestroyImmediate(linkBuffer[0].joint);
 
-        // Failed to latch on to any object
-        if (OnGrappleFail != null)
-            OnGrappleFail.Invoke();
+        if(willContact)
+        {
+            if (rHit.rigidbody == null)
+            {
+                rHit.collider.gameObject.AddComponent<Rigidbody>();
+                rHit.rigidbody.isKinematic = true;
+            }
+
+            if (linkBuffer[0].joint == null)
+                linkBuffer[0].joint = linkBuffer[0].rigidBody.gameObject.AddComponent<CharacterJoint>();
+
+            linkBuffer[0].joint.connectedBody = rHit.rigidbody;
+
+            if (OnGrappleContact != null)
+                OnGrappleContact.Invoke();
+        }
+        else
+        {
+            if (linkBuffer[0].joint != null)
+                DestroyImmediate(linkBuffer[0].joint);
+
+            // Failed to latch on to any object
+            if (OnGrappleFail != null)
+                OnGrappleFail.Invoke();
+        }
     }
+
+    //IEnumerator iFire()
+    //{
+    //    Vector3 direction = transform.forward;
+    //    Vector3 spacing = direction * linkSpacing;
+    //    Vector3 curPosition = transform.position;
+
+    //    RaycastHit rHit;
+    //    Vector3 finalDestination;
+
+    //    do
+    //    {
+    //        finalDestination = transform.position + (transform.forward * maxLinkCount * linkSpacing); //willHit ? rHit.point : transform.position + (direction * maxRopeLength);
+    //        curPosition = Vector3.MoveTowards(curPosition, finalDestination, Time.deltaTime * grappleForce);
+    //        direction = (curPosition - transform.position).normalized;
+    //        spacing = direction * linkSpacing;
+
+    //        int jointCount = Mathf.CeilToInt(Vector3.Distance(curPosition, transform.position) / linkSpacing);
+    //        activeJoints = 0;
+
+    //        for (int i = 0; i < jointCount - 1; i++)
+    //        {
+    //            linkBuffer[i].SetActive(true);
+    //            activeJoints++;
+
+    //            linkBuffer[i].isKinematic = true;
+    //            linkBuffer[i].transform.position = (curPosition - (spacing * i));
+    //            linkBuffer[i].transform.localScale = Vector3.one * linkScale;
+
+    //            if (alternateJoints && i % 2 == 0)
+    //                linkBuffer[i].transform.rotation = Quaternion.FromToRotation(Vector3.forward, direction) * Quaternion.Euler(0, 0, 90);
+    //            else
+    //                linkBuffer[i].transform.rotation = Quaternion.FromToRotation(Vector3.forward, direction);
+    //        }
+
+    //        float rayDist = linkSpacing * grappleForce * Time.deltaTime;
+    //        Debug.DrawRay(curPosition, direction * rayDist, Color.red);
+    //        if (Physics.Raycast(curPosition, direction * rayDist, out rHit, linkSpacing))
+    //        {
+    //            LinkRope();
+
+    //            Rigidbody hitRigidbody = rHit.collider.gameObject.GetComponent<Rigidbody>();
+    //            if (hitRigidbody == null)
+    //            {
+    //                hitRigidbody = rHit.collider.gameObject.AddComponent<Rigidbody>();
+    //                hitRigidbody.isKinematic = true;
+    //            }
+
+    //            if (linkBuffer[0].joint == null)
+    //                linkBuffer[0].joint = linkBuffer[0].rigidBody.gameObject.AddComponent<CharacterJoint>();
+
+    //            linkBuffer[0].joint.connectedBody = hitRigidbody;
+
+    //            if (OnGrappleContact != null)
+    //                OnGrappleContact.Invoke();
+
+    //            yield break;
+    //        }
+
+    //        yield return 0;
+    //    }
+    //    while (Vector3.SqrMagnitude(finalDestination - curPosition) > 0.01f);
+
+    //    LinkRope();
+    //    DestroyImmediate(linkBuffer[0].joint);
+
+    //    // Failed to latch on to any object
+    //    if (OnGrappleFail != null)
+    //        OnGrappleFail.Invoke();
+    //}
 
     void LinkRope()
     {
@@ -212,8 +284,10 @@ public class Grapple : MonoBehaviour
             if (linkBuffer[i].joint != null)
             {
                 linkBuffer[i].joint.axis = new Vector3(0, 0, 1);
-                linkBuffer[i].joint.swing1Limit = new SoftJointLimit() { contactDistance = 90 };
-                linkBuffer[i].joint.swing2Limit = new SoftJointLimit() { contactDistance = 90 };
+                linkBuffer[i].joint.swing1Limit = new SoftJointLimit() { limit = 90 };
+                linkBuffer[i].joint.swing2Limit = new SoftJointLimit() { limit = 90 };
+                linkBuffer[i].joint.lowTwistLimit = new SoftJointLimit() { limit = -60 };
+                linkBuffer[i].joint.highTwistLimit = new SoftJointLimit() { limit = 60 };
                 linkBuffer[i].joint.swingLimitSpring = new SoftJointLimitSpring() { damper = 1 };
             }
 
@@ -223,8 +297,11 @@ public class Grapple : MonoBehaviour
 
     public void DisconnectFromTarget()
     {
-        linkBuffer[0].joint.connectedBody = null;
-        DestroyImmediate(linkBuffer[0].joint);
+        if (linkBuffer[0].joint != null)
+        {
+            linkBuffer[0].joint.connectedBody = null;
+            DestroyImmediate(linkBuffer[0].joint);
+        }
     }
 
     public void ConnectPlayer(Rigidbody _body)
@@ -234,10 +311,10 @@ public class Grapple : MonoBehaviour
         playerJoint.connectedBody = linkBuffer[activeJoints - 1].rigidBody;
 
         playerJoint.axis = new Vector3(0, 0, 1);
-        playerJoint.swing1Limit = new SoftJointLimit() { contactDistance = 180 };
-        playerJoint.swing2Limit = new SoftJointLimit() { contactDistance = 180 };
-        playerJoint.lowTwistLimit = new SoftJointLimit() { contactDistance = -180 };
-        playerJoint.highTwistLimit = new SoftJointLimit() { contactDistance = 180 };
+        playerJoint.swing1Limit = new SoftJointLimit() { limit = 180 };
+        playerJoint.swing2Limit = new SoftJointLimit() { limit = 180 };
+        playerJoint.lowTwistLimit = new SoftJointLimit() { limit = -180 };
+        playerJoint.highTwistLimit = new SoftJointLimit() { limit = 180 };
 
         playerJoint.swingLimitSpring = new SoftJointLimitSpring() { damper = 1 };
 
